@@ -113,8 +113,8 @@ export class BrainManagerV2 {
     
     // CRITICAL: Always check reminders first for bootstrap protocol
     instructions.push(BrainToolInstructions.custom(
-      'reminders:check_reminders',
-      { filter: 'all' },
+      'brain-manager:check_reminders',
+      { priority: 'critical' },
       '[BOOT-001] Check reminders for awakening protocol and critical instructions'
     ));
     
@@ -1252,5 +1252,12 @@ ${result.nextSteps.map(step => `- ${step}`).join('\n')}
       instructions: result.instructions,
       nextSteps: result.nextSteps
     };
+  }
+
+  /**
+   * Get the current project context
+   */
+  getCurrentProject(): ProjectContext | null {
+    return this.currentProject;
   }
 }

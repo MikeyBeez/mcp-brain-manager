@@ -16,6 +16,7 @@ import { BrainManagerV2, SessionContext, ProjectContext } from './brain-manager-
 import { SemanticRouter } from './semantic-router.js';
 import { ProjectTemplate, TemplateManager } from './template-manager.js';
 import { BrainToolInstruction } from './brain-instructions.js';
+import { ReminderQueue } from './reminder-queue.js';
 
 // Initialize server
 const server = new Server(
@@ -34,6 +35,7 @@ const server = new Server(
 const brainManager = new BrainManagerV2();
 const semanticRouter = new SemanticRouter();
 const templateManager = new TemplateManager();
+const reminderQueue = new ReminderQueue();
 
 // Error handling helper
 function createError(code: ErrorCode, message: string) {
@@ -355,6 +357,121 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           }
         }
+      },
+      // Reminder tools - LIFO queue for session continuity
+      {
+        name: 'remind_me',
+        description: 'Add a reminder to the LIFO queue (most recent shown first)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            content: {
+              type: 'string',
+              description: 'What to remember'
+            },
+            priority: {
+              type: 'string',
+              enum: ['critical', 'high', 'normal', 'low'],
+              description: 'Priority level (default: normal)',
+              default: 'normal'
+            }
+          },
+          required: ['content']
+        }
+      },
+      {
+        name: 'check_reminders',
+        description: 'Check reminders in LIFO order (newest first)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            priority: {
+              type: 'string',
+              enum: ['all', 'critical', 'high', 'normal', 'low'],
+              description: 'Filter by priority (default: all)',
+              default: 'all'
+            },
+            project: {
+              type: 'string',
+              description: 'Filter by project',
+              nullable: true
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum number to show',
+              default: 10
+            }
+          }
+        }
+      },
+      {
+        name: 'complete_reminder',
+        description: 'Mark a reminder as completed',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Reminder ID'
+            }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'archive_reminder',
+        description: 'Archive a reminder (keeps history)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Reminder ID'
+            }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'move_reminder_to_notes',
+        description: 'Move reminder to permanent Obsidian notes',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Reminder ID'
+            },
+            additionalNote: {
+              type: 'string',
+              description: 'Additional note to include',
+              nullable: true
+            }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'reminder_stats',
+        description: 'Get statistics about reminders',
+        inputSchema: {
+          type: 'object',
+          properties: {}
+        }
+      },
+      {
+        name: 'cleanup_reminders',
+        description: 'Clean up old archived reminders',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            daysToKeep: {
+              type: 'number',
+              description: 'Keep reminders newer than N days (default: 30)',
+              default: 30
+            }
+          }
+        }
       }
     ]
   };
@@ -371,6 +488,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     switch (name) {
       case 'manager_init': {
+        // Always check for critical reminders first (awakening protocol)
+        const startupReminders = reminderQueue.getStartupReminders();
+        let criticalReminders = [];
+        
+        if (startupReminders.length > 0) {
+          for (const reminder of startupReminders) {
+            criticalReminders.push({
+              priority: reminder.priority,
+              id: reminder.id,
+              content: reminder.content,
+              created: reminder.created,
+              project: reminder.context?.project
+            });
+          }
+        }
+        
         const result = await brainManager.initialize(
           (args.sessionData as SessionContext | undefined) || undefined,
           (args.projectData as ProjectContext | undefined) || undefined
@@ -402,7 +535,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 instructions: result.instructions,
                 suggestedActions: result.suggestedActions,
                 lastSession: args.sessionData || null,
-                currentProject: args.projectData || null
+                currentProject: args.projectData || null,
+                criticalReminders: criticalReminders.length > 0 ? criticalReminders : null,
+                reminderMessage: criticalReminders.length > 0 ? 
+                  `🚨 AWAKENING PROTOCOL: ${criticalReminders.length} critical reminder(s) found. Please check reminders for important context!` : null
               }, null, 2)
             }
           ]
@@ -649,6 +785,30 @@ Available commands:
 ❓ brain_manager_help - Show this help
    Optional: command (specific command for details)
 
+== REMINDER TOOLS (LIFO Queue) ==
+
+🔔 remind_me - Add a reminder to the queue
+   Required: content
+   Optional: priority (critical/high/normal/low)
+
+📋 check_reminders - Check reminders (newest first)
+   Optional: priority, project, limit
+
+✅ complete_reminder - Mark reminder as completed
+   Required: id
+
+📦 archive_reminder - Archive a reminder
+   Required: id
+
+📝 move_reminder_to_notes - Move to Obsidian notes
+   Required: id
+   Optional: additionalNote
+
+📊 reminder_stats - Get reminder statistics
+
+🧹 cleanup_reminders - Clean old archived reminders
+   Optional: daysToKeep
+
 Use 'brain_manager_help' with a specific command for detailed information.`;
         } else {
           switch (command) {
@@ -773,6 +933,196 @@ create_project {
             {
               type: 'text',
               text: helpText
+            }
+          ]
+        };
+      }
+
+      // Reminder tool implementations
+      case 'remind_me': {
+        const { content, priority } = args as { content: string; priority?: 'critical' | 'high' | 'normal' | 'low' };
+        const currentProject = brainManager.getCurrentProject();
+        const context = currentProject ? { project: currentProject.projectName } : undefined;
+        
+        const id = reminderQueue.push(content, priority || 'normal', context);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Reminder added: ${id}\nPriority: ${priority || 'normal'}${context ? `\nProject: ${context.project}` : ''}`
+            }
+          ]
+        };
+      }
+
+      case 'check_reminders': {
+        const { priority, project, limit } = args as { 
+          priority?: string; 
+          project?: string; 
+          limit?: number 
+        };
+        
+        // Always show critical reminders on startup
+        const startupReminders = reminderQueue.getStartupReminders();
+        const reminders = reminderQueue.peek({ priority, project, limit });
+        
+        if (reminders.length === 0 && startupReminders.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: '📭 No active reminders.'
+              }
+            ]
+          };
+        }
+        
+        let output = '';
+        
+        // Show critical startup reminders first
+        if (startupReminders.length > 0 && priority !== 'low' && priority !== 'normal') {
+          output += '🚨 CRITICAL REMINDERS (Always shown on startup):\n\n';
+          for (const reminder of startupReminders) {
+            output += `[${reminder.priority.toUpperCase()}] ${reminder.id}\n`;
+            output += `📝 ${reminder.content}\n`;
+            output += `⏰ Created: ${new Date(reminder.created).toLocaleString()}\n`;
+            if (reminder.context?.project) {
+              output += `📁 Project: ${reminder.context.project}\n`;
+            }
+            output += '\n';
+          }
+          output += '---\n\n';
+        }
+        
+        // Show filtered reminders
+        if (reminders.length > 0) {
+          output += '📋 Active Reminders (LIFO - newest first):\n\n';
+          for (const reminder of reminders) {
+            const age = Date.now() - new Date(reminder.created).getTime();
+            const ageStr = age < 3600000 ? `${Math.floor(age / 60000)}m ago` :
+                          age < 86400000 ? `${Math.floor(age / 3600000)}h ago` :
+                          `${Math.floor(age / 86400000)}d ago`;
+            
+            output += `[${reminder.priority.toUpperCase()}] ${reminder.id} (${ageStr})\n`;
+            output += `📝 ${reminder.content}\n`;
+            if (reminder.context?.project) {
+              output += `📁 Project: ${reminder.context.project}\n`;
+            }
+            output += '\n';
+          }
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output.trim()
+            }
+          ]
+        };
+      }
+
+      case 'complete_reminder': {
+        const { id } = args as { id: string };
+        const reminder = reminderQueue.pop(id, true);
+        
+        if (!reminder) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `❌ Reminder ${id} not found or already completed.`
+              }
+            ]
+          };
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Completed reminder ${id}: "${reminder.content}"`
+            }
+          ]
+        };
+      }
+
+      case 'archive_reminder': {
+        const { id } = args as { id: string };
+        const success = reminderQueue.archive(id);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: success ? 
+                `📦 Archived reminder ${id}` : 
+                `❌ Reminder ${id} not found or already archived.`
+            }
+          ]
+        };
+      }
+
+      case 'move_reminder_to_notes': {
+        const { id, additionalNote } = args as { id: string; additionalNote?: string };
+        const result = reminderQueue.moveToNotes(id, additionalNote);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: result.success ? 
+                `📝 ${result.message}` : 
+                `❌ ${result.message}`
+            }
+          ]
+        };
+      }
+
+      case 'reminder_stats': {
+        const stats = reminderQueue.getStats();
+        
+        let output = '📊 Reminder Statistics:\n\n';
+        output += `Total reminders: ${stats.total}\n`;
+        output += `Active: ${stats.active}\n`;
+        output += `Completed: ${stats.completed}\n`;
+        output += `Archived: ${stats.archived}\n\n`;
+        
+        if (stats.active > 0) {
+          output += 'Active by priority:\n';
+          output += `  Critical: ${stats.byPriority.critical}\n`;
+          output += `  High: ${stats.byPriority.high}\n`;
+          output += `  Normal: ${stats.byPriority.normal}\n`;
+          output += `  Low: ${stats.byPriority.low}\n\n`;
+          
+          if (Object.keys(stats.byProject).length > 0) {
+            output += 'Active by project:\n';
+            for (const [project, count] of Object.entries(stats.byProject)) {
+              output += `  ${project}: ${count}\n`;
+            }
+          }
+        }
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: output.trim()
+            }
+          ]
+        };
+      }
+
+      case 'cleanup_reminders': {
+        const { daysToKeep } = args as { daysToKeep?: number };
+        const count = reminderQueue.cleanup(daysToKeep || 30);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `🧹 Cleaned up ${count} old archived reminders.`
             }
           ]
         };
