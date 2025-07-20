@@ -17,6 +17,7 @@ import { SemanticRouter } from './semantic-router.js';
 import { ProjectTemplate, TemplateManager } from './template-manager.js';
 import { BrainToolInstruction } from './brain-instructions.js';
 import { ReminderQueue } from './reminder-queue.js';
+import { MultiProjectManager } from './multi-project-manager.js';
 
 // Initialize server
 const server = new Server(
@@ -36,6 +37,7 @@ const brainManager = new BrainManagerV2();
 const semanticRouter = new SemanticRouter();
 const templateManager = new TemplateManager();
 const reminderQueue = new ReminderQueue();
+const multiProjectManager = new MultiProjectManager();
 
 // Error handling helper
 function createError(code: ErrorCode, message: string) {
@@ -469,6 +471,107 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'number',
               description: 'Keep reminders newer than N days (default: 30)',
               default: 30
+            }
+          }
+        }
+      },
+      // Multi-project management tools
+      {
+        name: 'project_status',
+        description: 'Get status of all active projects (foreground, background, recent)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            verbose: {
+              type: 'boolean',
+              description: 'Include detailed status information',
+              default: false
+            }
+          }
+        }
+      },
+      {
+        name: 'switch_project_mode',
+        description: 'Switch between projects with different modes',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectName: {
+              type: 'string',
+              description: 'Name of project to switch to'
+            },
+            mode: {
+              type: 'string',
+              enum: ['foreground', 'background', 'check'],
+              description: 'How to switch: foreground (full switch), background (add to background), check (quick look)',
+              default: 'foreground'
+            }
+          },
+          required: ['projectName']
+        }
+      },
+      {
+        name: 'update_background',
+        description: 'Update a background project status',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectName: {
+              type: 'string',
+              description: 'Name of background project'
+            },
+            update: {
+              type: 'object',
+              description: 'Update details',
+              properties: {
+                status: { type: 'string' },
+                note: { type: 'string' },
+                metrics: { type: 'object' }
+              }
+            }
+          },
+          required: ['projectName', 'update']
+        }
+      },
+      {
+        name: 'list_active_projects',
+        description: 'List all projects by status with activity metrics',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            includeArchived: {
+              type: 'boolean',
+              description: 'Include archived projects',
+              default: false
+            }
+          }
+        }
+      },
+      {
+        name: 'promote_to_foreground',
+        description: 'Promote a background project to foreground',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            projectName: {
+              type: 'string',
+              description: 'Project to promote'
+            }
+          },
+          required: ['projectName']
+        }
+      },
+      {
+        name: 'demote_to_background',
+        description: 'Move current foreground project to background',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            status: {
+              type: 'string',
+              description: 'Background status',
+              enum: ['processing', 'monitoring', 'waiting', 'scheduled'],
+              default: 'monitoring'
             }
           }
         }
@@ -1123,6 +1226,91 @@ create_project {
             {
               type: 'text',
               text: `🧹 Cleaned up ${count} old archived reminders.`
+            }
+          ]
+        };
+      }
+
+      // Multi-project management tool implementations
+      case 'project_status': {
+        const { verbose } = args as { verbose?: boolean };
+        const status = await multiProjectManager.getProjectStatus(verbose || false);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: status
+            }
+          ]
+        };
+      }
+
+      case 'switch_project_mode': {
+        const { projectName, mode } = args as { projectName: string; mode?: 'foreground' | 'background' | 'check' };
+        const result = await multiProjectManager.switchProject(projectName, mode || 'foreground');
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ ${result.message}`
+            }
+          ]
+        };
+      }
+
+      case 'update_background': {
+        const { projectName, update } = args as { projectName: string; update: any };
+        const result = await multiProjectManager.updateBackground(projectName, update);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ Updated background project ${projectName}`
+            }
+          ]
+        };
+      }
+
+      case 'list_active_projects': {
+        const { includeArchived } = args as { includeArchived?: boolean };
+        const list = await multiProjectManager.listActiveProjects(includeArchived || false);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: list
+            }
+          ]
+        };
+      }
+
+      case 'promote_to_foreground': {
+        const { projectName } = args as { projectName: string };
+        const result = await multiProjectManager.promoteToForeground(projectName);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ ${result.message}`
+            }
+          ]
+        };
+      }
+
+      case 'demote_to_background': {
+        const { status } = args as { status?: 'processing' | 'monitoring' | 'waiting' | 'scheduled' };
+        const result = await multiProjectManager.demoteToBackground(status || 'monitoring');
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `✅ ${result.message}`
             }
           ]
         };
