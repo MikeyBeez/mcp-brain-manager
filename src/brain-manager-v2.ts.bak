@@ -11,6 +11,8 @@ import { SecureConfigManager, ProjectConfiguration } from './config/secure-confi
 import { validateForSensitiveData, sanitizeSensitiveData, createPasswordPromptConfig } from './security/validators.js';
 import { RepoUpdateProtocol, RepoUpdateOptions } from './protocols/repo-update-protocol.js';
 import { CreateProjectProtocol, CreateProjectOptions } from './protocols/create-project-protocol.js';
+// Temporarily disabled: import { PythonProjectProtocol, PythonProjectOptions, PythonProjectResult } from './protocols/python-project-protocol.js';
+import { ResearchProjectCreator, ResearchProjectOptions, ResearchProjectResult, createResearchProject } from './protocols/research-project-protocol.js';
 
 export interface SessionContext {
   timestamp: string;
@@ -96,6 +98,7 @@ export class BrainManagerV2 {
   private secureSessionToken: string | null = null;
   private repoUpdateProtocol: RepoUpdateProtocol;
   private createProjectProtocol: CreateProjectProtocol;
+  // Temporarily disabled: private pythonProjectProtocol: PythonProjectProtocol;
   private githubUsername: string | null = null;
   
   constructor() {
@@ -103,6 +106,7 @@ export class BrainManagerV2 {
     this.secureConfig = new SecureConfigManager();
     this.repoUpdateProtocol = new RepoUpdateProtocol();
     this.createProjectProtocol = new CreateProjectProtocol();
+    // Temporarily disabled: this.pythonProjectProtocol = new PythonProjectProtocol();
   }
 
   async initialize(
@@ -111,7 +115,14 @@ export class BrainManagerV2 {
   ): Promise<InitializationResult> {
     const instructions: BrainToolInstruction[] = [];
     
-    // Always start with brain_init
+    // CRITICAL: Always check reminders first for bootstrap protocol
+    instructions.push(BrainToolInstructions.custom(
+      'brain-manager:check_reminders',
+      { priority: 'critical' },
+      '[BOOT-001] Check reminders for awakening protocol and critical instructions'
+    ));
+    
+    // Then initialize brain
     instructions.push(BrainToolInstructions.brainInit());
     
     // If no existing session provided, we need to load it
@@ -396,6 +407,17 @@ export class BrainManagerV2 {
       this.currentProject = project;
       this.projectCache.set(projectName, project);
       
+      // ALWAYS update last_project state when switching projects
+      instructions.push(
+        BrainToolInstructions.stateSet('project', 'last_project', {
+          name: projectName,
+          path: `/Users/bard/Code/${projectName}`,
+          status: project.status,
+          last_modified: new Date().toISOString(),
+          description: project.summary
+        })
+      );
+      
       return {
         success: true,
         project,
@@ -427,10 +449,13 @@ export class BrainManagerV2 {
     this.currentProject = previous.project;
     this.projectCache.set(previous.project.projectName, previous.project);
 
+    // Note: returnToPrevious doesn't provide instructions array, so we can't update state here
+    // This method should be enhanced to return instructions for state updates
+
     return {
       success: true,
       project: previous.project,
-      message: `Returned to project: ${previous.project.projectName} (saved at ${previous.timestamp})`
+      message: `Returned to project: ${previous.project.projectName} (saved at ${previous.timestamp}). Note: Execute brain:state_set manually to update last_project.`
     };
   }
 
@@ -811,6 +836,23 @@ ${project.currentFocus}
       
       this.projectCache.set(projectName, newProject);
       this.currentProject = newProject;
+      
+      // Update last_project state to track current project
+      result.instructions.push({
+        tool: 'brain:state_set',
+        args: {
+          category: 'project',
+          key: 'last_project',
+          value: {
+            name: projectName,
+            path: result.projectPath,
+            status: 'active',
+            last_modified: new Date().toISOString(),
+            description: newProject.summary
+          }
+        },
+        description: 'Update last_project tracker'
+      });
     }
     
     return {
@@ -903,6 +945,25 @@ ${project.currentFocus}
     };
 
     const result = await this.repoUpdateProtocol.executeUpdate(updateOptions);
+
+    // Update last_project state to reflect recent activity
+    if (result.success) {
+      result.instructions.push({
+        tool: 'brain:state_set',
+        args: {
+          category: 'project',
+          key: 'last_project',
+          value: {
+            name: this.currentProject.projectName,
+            path: `/Users/bard/Code/${this.currentProject.projectName}`,
+            status: this.currentProject.status,
+            last_modified: new Date().toISOString(),
+            description: this.currentProject.summary
+          }
+        },
+        description: 'Update last_project tracker after repository update'
+      });
+    }
 
     // Generate summary text
     const summary = `
@@ -1180,7 +1241,7 @@ Would you like to proceed with ${suggestedType} as the project type, or would yo
     });
 
     // Also save to Brain state for persistence
-    const saveInstruction = BrainToolInstructions.setState(
+    const saveInstruction = BrainToolInstructions.stateSet(
       'session',
       `project-plan-${projectName}`,
       {
@@ -1217,6 +1278,52 @@ Would you like to proceed with ${suggestedType} as the project type, or would yo
 
     const result = await this.createProjectProtocol.executeCreate(options);
 
+    // Create project context and set as current
+    if (result.success) {
+      const newProject: ProjectContext = {
+        projectName: options.projectName,
+        status: 'active',
+        created: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        summary: options.description || `${options.projectType} project created`,
+        currentFocus: 'Initial development',
+        openTasks: ['Complete initial implementation', 'Write tests', 'Create documentation'],
+        completedTasks: ['Project structure created', 'Git repository initialized'],
+        keyDecisions: [],
+        milestones: [{
+          timestamp: new Date().toISOString(),
+          title: 'Project Created',
+          description: 'Automated project setup completed',
+          artifacts: ['README.md']
+        }],
+        keyFiles: [`${result.projectPath}/README.md`],
+        metadata: {
+          createdBy: 'brain-manager',
+          projectPath: result.projectPath
+        }
+      };
+      
+      this.projectCache.set(options.projectName, newProject);
+      this.currentProject = newProject;
+      
+      // Update last_project state to track current project
+      result.instructions.push({
+        tool: 'brain:state_set',
+        args: {
+          category: 'project',
+          key: 'last_project',
+          value: {
+            name: options.projectName,
+            path: result.projectPath,
+            status: 'active',
+            last_modified: new Date().toISOString(),
+            description: newProject.summary
+          }
+        },
+        description: 'Update last_project tracker'
+      });
+    }
+
     // Format summary for display
     const summary = `
 ## Project Created Successfully! 🎉
@@ -1235,7 +1342,7 @@ ${result.summary.dependenciesInstalled ? '✅' : '❌'} Dependencies installed
 ${result.summary.brainIntegrated ? '✅' : '❌'} Brain integration
 
 ### Next Steps:
-${result.nextSteps.map(step => `- ${step}`).join('\n')}
+${result.nextSteps.map((step: string) => `- ${step}`).join('\n')}
 `;
 
     return {
@@ -1245,5 +1352,204 @@ ${result.nextSteps.map(step => `- ${step}`).join('\n')}
       instructions: result.instructions,
       nextSteps: result.nextSteps
     };
+  }
+
+  /**
+   * Create a new Python project with full automation
+   */
+  async createPythonProject(
+    options: PythonProjectOptions
+  ): Promise<{
+    success: boolean;
+    projectPath: string;
+    summary: string;
+    instructions: BrainToolInstruction[];
+    nextSteps: string[];
+  }> {
+    // Set GitHub username if available
+    if (this.githubUsername) {
+      this.pythonProjectProtocol.setGitHubUsername(this.githubUsername);
+    }
+
+    const result = await this.pythonProjectProtocol.executeCreate(options);
+
+    // Create project context and set as current
+    if (result.success) {
+      const newProject: ProjectContext = {
+        projectName: options.projectName,
+        status: 'active',
+        created: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        summary: options.description || `Python ${options.projectType} project created`,
+        currentFocus: 'Initial development',
+        openTasks: ['Complete initial implementation', 'Write comprehensive tests', 'Add error handling'],
+        completedTasks: ['Project structure created', 'Virtual environment set up', 'Git repository initialized'],
+        keyDecisions: [],
+        milestones: [{
+          timestamp: new Date().toISOString(),
+          title: 'Python Project Created',
+          description: 'Automated Python project setup completed',
+          artifacts: ['pyproject.toml', 'README.md']
+        }],
+        keyFiles: [`${result.projectPath}/pyproject.toml`, `${result.projectPath}/README.md`],
+        metadata: {
+          createdBy: 'brain-manager-python',
+          projectPath: result.projectPath,
+          language: 'python',
+          packageManager: options.packageManager || 'uv',
+          pythonVersion: options.pythonVersion || '3.11'
+        }
+      };
+      
+      this.projectCache.set(options.projectName, newProject);
+      this.currentProject = newProject;
+      
+      // Update last_project state to track current project
+      result.instructions.push({
+        tool: 'brain:state_set',
+        args: {
+          category: 'project',
+          key: 'last_project',
+          value: {
+            name: options.projectName,
+            path: result.projectPath,
+            status: 'active',
+            last_modified: new Date().toISOString(),
+            description: newProject.summary
+          }
+        },
+        description: 'Update last_project tracker'
+      });
+    }
+
+    // Format summary for display
+    const summary = `
+## Python Project Created Successfully! 🐍🎉
+
+### Project Details:
+- **Name:** ${result.summary.projectName}
+- **Type:** ${result.summary.projectType}
+- **Location:** ${result.summary.location}
+- **Python Version:** ${result.summary.pythonVersion}
+- **Package Manager:** ${result.summary.packageManager}
+${result.summary.githubRepo ? `- **Repository:** ${result.summary.githubRepo}` : ''}
+
+### Setup Complete:
+${result.summary.gitInitialized ? '✅' : '❌'} Git initialized
+${result.summary.virtualEnvCreated ? '✅' : '❌'} Virtual environment created
+${result.summary.testsCreated ? '✅' : '❌'} Tests created
+${result.summary.documentationCreated ? '✅' : '❌'} Documentation created
+${result.summary.dependenciesInstalled ? '✅' : '❌'} Dependencies installed
+${result.summary.brainIntegrated ? '✅' : '❌'} Brain integration
+
+### Next Steps:
+${result.nextSteps.map((step: string) => `- ${step}`).join('\n')}
+`;
+
+    return {
+      success: result.success,
+      projectPath: result.projectPath,
+      summary,
+      instructions: result.instructions,
+      nextSteps: result.nextSteps
+    };
+  }
+
+  /**
+   * Create a research project with proper structure and Brain integration
+   */
+  async createResearchProject(options: ResearchProjectOptions): Promise<{
+    success: boolean;
+    projectPath: string;
+    summary: string;
+    instructions: BrainToolInstruction[];
+    nextSteps: string[];
+  }> {
+    const result = await createResearchProject(options);
+
+    // Create project context and set as current
+    if (result.success) {
+      const newProject: ProjectContext = {
+        projectName: options.projectName,
+        status: 'active',
+        created: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        summary: options.description,
+        currentFocus: 'Research methodology and planning',
+        openTasks: ['Define research methodology', 'Create investigation plan', 'Begin Phase 1'],
+        completedTasks: ['Research project structure created', 'Templates set up'],
+        keyDecisions: [{
+          timestamp: new Date().toISOString(),
+          decision: `Use ${options.researchType} research approach`,
+          rationale: options.methodology || 'Systematic research methodology',
+          impact: 'Establishes foundation for rigorous investigation'
+        }],
+        milestones: [{
+          timestamp: new Date().toISOString(),
+          title: 'Research Project Created',
+          description: 'Research project structure and methodology established',
+          artifacts: ['00-project-overview.md', 'methodology/', 'templates/']
+        }],
+        keyFiles: [
+          `${result.projectPath}/00-project-overview.md`,
+          `${result.projectPath}/methodology/01-research-methodology.md`,
+          `${result.projectPath}/findings/session-tracking.md`
+        ],
+        metadata: {
+          createdBy: 'brain-manager-research',
+          projectPath: result.projectPath,
+          projectType: 'research',
+          researchType: options.researchType,
+          methodology: options.methodology,
+          timeframe: options.timeframe,
+          phases: options.phases,
+          deliverables: options.deliverables
+        }
+      };
+      
+      this.projectCache.set(options.projectName, newProject);
+      this.currentProject = newProject;
+    }
+
+    // Format summary for display
+    const summary = `
+## Research Project Created Successfully! 🔬📋
+
+### Project Details:
+- **Name:** ${options.projectName}
+- **Type:** ${options.researchType} research
+- **Location:** ${result.projectPath}
+- **Methodology:** ${options.methodology || 'To be defined'}
+- **Timeframe:** ${options.timeframe || 'To be planned'}
+- **Phases:** ${options.phases?.length || 0}
+- **Deliverables:** ${options.deliverables?.length || 0}
+
+### Structure Created:
+✅ Project overview and methodology
+✅ Investigation planning templates
+✅ Session tracking system
+✅ Evidence documentation structure
+✅ Progress monitoring system
+✅ Brain state integration
+✅ Obsidian note structure
+
+### Next Steps:
+${result.nextSteps.map((step: string) => `- ${step}`).join('\n')}
+`;
+
+    return {
+      success: result.success,
+      projectPath: result.projectPath,
+      summary,
+      instructions: result.brainInstructions,
+      nextSteps: result.nextSteps
+    };
+  }
+
+  /**
+   * Get the current project context
+   */
+  getCurrentProject(): ProjectContext | null {
+    return this.currentProject;
   }
 }

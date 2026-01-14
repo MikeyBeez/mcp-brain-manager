@@ -8,16 +8,16 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "dev": "node --watch dist/index.js",
-    "test": "node --test src/**/*.test.ts"
+    "test": "jest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.3"
+    "@modelcontextprotocol/sdk": "^1.0.0"
   },
   "devDependencies": {
-    "@types/jest": "^29.0.0",
     "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
     "jest": "^29.0.0",
-    "typescript": "^5.0.0"
+    "@types/jest": "^29.0.0"
   },
   "keywords": [
     "mcp",

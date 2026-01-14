@@ -1,0 +1,2158 @@
+/**
+ * Python Project Protocol
+ * Extension to CreateProjectProtocol for Python-specific project creation
+ */
+
+import { BrainToolInstruction, BrainToolInstructions } from '../brain-instructions.js';
+
+export interface PythonProjectOptions {
+  projectName: string;
+  projectType: 'mcp-tool' | 'web-app' | 'cli-tool' | 'library' | 'api' | 'data-science' | 'ml' | 'general';
+  description?: string;
+  visibility?: 'public' | 'private';
+  pythonVersion?: string; // e.g., "3.11", "3.12"
+  packageManager?: 'uv' | 'pip' | 'poetry' | 'conda';
+  features?: {
+    testing?: boolean;
+    linting?: boolean;
+    formatting?: boolean;
+    docker?: boolean;
+    cicd?: boolean;
+    vscode?: boolean;
+    jupyter?: boolean;
+    docs?: boolean;
+  };
+  dependencies?: string[];
+  devDependencies?: string[];
+  license?: 'MIT' | 'Apache-2.0' | 'GPL-3.0' | 'ISC' | 'None';
+  author?: string;
+  githubUsername?: string;
+}
+
+export interface PythonProjectResult {
+  success: boolean;
+  projectPath: string;
+  steps: StepResult[];
+  summary: PythonProjectSummary;
+  instructions: BrainToolInstruction[];
+  nextSteps: string[];
+}
+
+export interface StepResult {
+  step: string;
+  status: 'success' | 'failed' | 'skipped';
+  output?: string;
+  error?: string;
+}
+
+export interface PythonProjectSummary {
+  projectName: string;
+  projectType: string;
+  location: string;
+  pythonVersion: string;
+  packageManager: string;
+  gitInitialized: boolean;
+  githubRepo?: string;
+  virtualEnvCreated: boolean;
+  testsCreated: boolean;
+  documentationCreated: boolean;
+  dependenciesInstalled: boolean;
+  brainIntegrated: boolean;
+}
+
+export class PythonProjectProtocol {
+  private githubUsername: string | null = null;
+  
+  /**
+   * Set GitHub username for repo creation
+   */
+  setGitHubUsername(username: string): void {
+    this.githubUsername = username;
+  }
+  
+  /**
+   * Execute Python project creation protocol
+   */
+  async executeCreate(options: PythonProjectOptions): Promise<PythonProjectResult> {
+    const steps: StepResult[] = [];
+    const instructions: BrainToolInstruction[] = [];
+    const projectPath = `/Users/bard/Code/${options.projectName}`;
+    
+    const summary: PythonProjectSummary = {
+      projectName: options.projectName,
+      projectType: options.projectType,
+      location: projectPath,
+      pythonVersion: options.pythonVersion || '3.11',
+      packageManager: options.packageManager || 'uv',
+      gitInitialized: false,
+      virtualEnvCreated: false,
+      testsCreated: false,
+      documentationCreated: false,
+      dependenciesInstalled: false,
+      brainIntegrated: false
+    };
+
+    // Step 1: Create project directory
+    const dirStep = this.createDirectoryStructure(options, projectPath);
+    steps.push(dirStep.result);
+    instructions.push(...dirStep.instructions);
+
+    // Step 2: Initialize pyproject.toml and core configuration files
+    const initStep = this.initializePythonProject(options, projectPath);
+    steps.push(initStep.result);
+    instructions.push(...initStep.instructions);
+
+    // Step 3: Create source files with starter code
+    const codeStep = this.createStarterCode(options, projectPath);
+    steps.push(codeStep.result);
+    instructions.push(...codeStep.instructions);
+
+    // Step 4: Set up virtual environment
+    const venvStep = this.setupVirtualEnvironment(options, projectPath);
+    steps.push(venvStep.result);
+    instructions.push(...venvStep.instructions);
+    summary.virtualEnvCreated = true;
+
+    // Step 5: Set up development environment
+    if (options.features?.vscode !== false) {
+      const devEnvStep = this.setupDevEnvironment(options, projectPath);
+      steps.push(devEnvStep.result);
+      instructions.push(...devEnvStep.instructions);
+    }
+
+    // Step 6: Initialize Git and create GitHub repo
+    const gitStep = this.initializeGit(options, projectPath);
+    steps.push(gitStep.result);
+    instructions.push(...gitStep.instructions);
+    summary.gitInitialized = true;
+
+    // Step 7: Set up CI/CD
+    if (options.features?.cicd !== false) {
+      const cicdStep = this.setupCICD(options, projectPath);
+      steps.push(cicdStep.result);
+      instructions.push(...cicdStep.instructions);
+    }
+
+    // Step 8: Install dependencies
+    const depsStep = this.installDependencies(options, projectPath);
+    steps.push(depsStep.result);
+    instructions.push(...depsStep.instructions);
+    summary.dependenciesInstalled = true;
+
+    // Step 9: Create documentation
+    const docsStep = this.createDocumentation(options, projectPath);
+    steps.push(docsStep.result);
+    instructions.push(...docsStep.instructions);
+    summary.documentationCreated = true;
+
+    // Step 10: Set up testing
+    if (options.features?.testing !== false) {
+      const testStep = this.setupTesting(options, projectPath);
+      steps.push(testStep.result);
+      instructions.push(...testStep.instructions);
+      summary.testsCreated = true;
+    }
+
+    // Step 11: Integrate with Brain
+    const brainStep = this.integrateBrain(options, projectPath);
+    steps.push(brainStep.result);
+    instructions.push(...brainStep.instructions);
+    summary.brainIntegrated = true;
+
+    // Generate next steps
+    const nextSteps = this.generateNextSteps(options, summary);
+
+    return {
+      success: steps.every(s => s.status !== 'failed'),
+      projectPath,
+      steps,
+      summary,
+      instructions,
+      nextSteps
+    };
+  }
+
+  private createDirectoryStructure(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Create main project directory
+    instructions.push({
+      tool: 'filesystem:create_directory',
+      args: { path: projectPath },
+      description: 'Create main project directory'
+    });
+
+    // Create standard Python project structure
+    const dirs = [
+      `${projectPath}/src`,
+      `${projectPath}/src/${options.projectName.replace(/-/g, '_')}`,
+      `${projectPath}/tests`,
+      `${projectPath}/docs`,
+      `${projectPath}/.github/workflows`
+    ];
+
+    if (options.features?.jupyter) {
+      dirs.push(`${projectPath}/notebooks`);
+    }
+
+    if (options.projectType === 'data-science' || options.projectType === 'ml') {
+      dirs.push(`${projectPath}/data`);
+      dirs.push(`${projectPath}/models`);
+      dirs.push(`${projectPath}/scripts`);
+    }
+
+    dirs.forEach(dir => {
+      instructions.push({
+        tool: 'filesystem:create_directory',
+        args: { path: dir },
+        description: `Create directory: ${dir.split('/').pop()}`
+      });
+    });
+
+    return {
+      result: {
+        step: 'Create directory structure',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private initializePythonProject(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Generate pyproject.toml
+    const pyprojectToml = this.generatePyprojectToml(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/pyproject.toml`,
+        content: pyprojectToml
+      },
+      description: 'Create pyproject.toml'
+    });
+
+    // Create __init__.py files
+    const packageName = options.projectName.replace(/-/g, '_');
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/src/${packageName}/__init__.py`,
+        content: `"""${options.description || options.projectName}"""\n\n__version__ = "0.1.0"\n`
+      },
+      description: 'Create package __init__.py'
+    });
+
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/tests/__init__.py`,
+        content: ''
+      },
+      description: 'Create tests __init__.py'
+    });
+
+    // Create .gitignore
+    const gitignore = this.generateGitignore();
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/.gitignore`,
+        content: gitignore
+      },
+      description: 'Create .gitignore'
+    });
+
+    // Create requirements files based on package manager
+    if (options.packageManager === 'pip') {
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/requirements.txt`,
+          content: this.generateRequirementsTxt(options)
+        },
+        description: 'Create requirements.txt'
+      });
+
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/requirements-dev.txt`,
+          content: this.generateDevRequirementsTxt(options)
+        },
+        description: 'Create dev requirements.txt'
+      });
+    }
+
+    return {
+      result: {
+        step: 'Initialize Python project files',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private createStarterCode(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    // Generate main module code based on project type
+    const mainCode = this.generateMainCode(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/src/${packageName}/main.py`,
+        content: mainCode
+      },
+      description: 'Create main.py'
+    });
+
+    // Create CLI entry point if CLI tool
+    if (options.projectType === 'cli-tool') {
+      const cliCode = this.generateCliCode(options);
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/src/${packageName}/cli.py`,
+          content: cliCode
+        },
+        description: 'Create CLI module'
+      });
+    }
+
+    // Create MCP server if MCP tool
+    if (options.projectType === 'mcp-tool') {
+      const mcpCode = this.generateMcpCode(options);
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/src/${packageName}/server.py`,
+          content: mcpCode
+        },
+        description: 'Create MCP server'
+      });
+    }
+
+    // Create web app if web-app or api
+    if (options.projectType === 'web-app' || options.projectType === 'api') {
+      const webCode = this.generateWebCode(options);
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/src/${packageName}/app.py`,
+          content: webCode
+        },
+        description: 'Create web application'
+      });
+    }
+
+    return {
+      result: {
+        step: 'Create starter code',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private setupVirtualEnvironment(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    switch (options.packageManager) {
+      case 'uv':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && uv venv`,
+            cwd: projectPath
+          },
+          description: 'Create virtual environment with uv'
+        });
+        break;
+        
+      case 'poetry':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && poetry env use python${options.pythonVersion || '3.11'}`,
+            cwd: projectPath
+          },
+          description: 'Create virtual environment with poetry'
+        });
+        break;
+        
+      case 'conda':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `conda create -n ${options.projectName} python=${options.pythonVersion || '3.11'} -y`,
+            cwd: projectPath
+          },
+          description: 'Create conda environment'
+        });
+        break;
+        
+      default: // pip
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && python${options.pythonVersion || '3.11'} -m venv venv`,
+            cwd: projectPath
+          },
+          description: 'Create virtual environment with pip'
+        });
+        break;
+    }
+
+    return {
+      result: {
+        step: 'Set up virtual environment',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private setupDevEnvironment(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Create VS Code settings
+    const vscodeSettings = this.generateVSCodeSettings(options);
+    instructions.push({
+      tool: 'filesystem:create_directory',
+      args: { path: `${projectPath}/.vscode` },
+      description: 'Create .vscode directory'
+    });
+
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/.vscode/settings.json`,
+        content: JSON.stringify(vscodeSettings, null, 2)
+      },
+      description: 'Create VS Code settings'
+    });
+
+    // Create launch configuration for debugging
+    const launchConfig = this.generateLaunchConfig(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/.vscode/launch.json`,
+        content: JSON.stringify(launchConfig, null, 2)
+      },
+      description: 'Create VS Code launch configuration'
+    });
+
+    return {
+      result: {
+        step: 'Set up development environment',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private initializeGit(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Initialize git repository
+    instructions.push({
+      tool: 'git:git_init',
+      args: { path: projectPath },
+      description: 'Initialize Git repository'
+    });
+
+    // Create initial commit
+    instructions.push({
+      tool: 'git:git_add',
+      args: { 
+        files: ['.'],
+        path: projectPath
+      },
+      description: 'Stage all files'
+    });
+
+    instructions.push({
+      tool: 'git:git_commit',
+      args: {
+        message: `Initial commit: ${options.projectName}`,
+        path: projectPath
+      },
+      description: 'Create initial commit'
+    });
+
+    // Create GitHub repository if username provided
+    if (this.githubUsername && options.visibility) {
+      instructions.push({
+        tool: 'system:system_exec',
+        args: {
+          command: `cd ${projectPath} && gh repo create ${this.githubUsername}/${options.projectName} --${options.visibility} --source=. --remote=origin --push`,
+          cwd: projectPath
+        },
+        description: 'Create GitHub repository'
+      });
+    }
+
+    return {
+      result: {
+        step: 'Initialize Git repository',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private setupCICD(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Create GitHub Actions workflow
+    const workflow = this.generateGitHubActionsWorkflow(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/.github/workflows/ci.yml`,
+        content: workflow
+      },
+      description: 'Create GitHub Actions CI workflow'
+    });
+
+    return {
+      result: {
+        step: 'Set up CI/CD pipeline',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private installDependencies(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    switch (options.packageManager) {
+      case 'uv':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && uv sync`,
+            cwd: projectPath
+          },
+          description: 'Install dependencies with uv'
+        });
+        break;
+        
+      case 'poetry':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && poetry install`,
+            cwd: projectPath
+          },
+          description: 'Install dependencies with poetry'
+        });
+        break;
+        
+      case 'conda':
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `conda activate ${options.projectName} && pip install -e .`,
+            cwd: projectPath
+          },
+          description: 'Install dependencies with conda'
+        });
+        break;
+        
+      default: // pip
+        instructions.push({
+          tool: 'system:system_exec',
+          args: {
+            command: `cd ${projectPath} && source venv/bin/activate && pip install -e . && pip install -r requirements-dev.txt`,
+            cwd: projectPath
+          },
+          description: 'Install dependencies with pip'
+        });
+        break;
+    }
+
+    return {
+      result: {
+        step: 'Install dependencies',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private createDocumentation(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Generate comprehensive README
+    const readme = this.generateReadme(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/README.md`,
+        content: readme
+      },
+      description: 'Create README.md'
+    });
+
+    // Create license file
+    if (options.license && options.license !== 'None') {
+      const license = this.generateLicense(options.license, options.author);
+      instructions.push({
+        tool: 'filesystem:write_file',
+        args: {
+          path: `${projectPath}/LICENSE`,
+          content: license
+        },
+        description: 'Create LICENSE file'
+      });
+    }
+
+    // Create CHANGELOG
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/CHANGELOG.md`,
+        content: this.generateChangelog(options)
+      },
+      description: 'Create CHANGELOG.md'
+    });
+
+    return {
+      result: {
+        step: 'Create documentation',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private setupTesting(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    // Create test files
+    const testCode = this.generateTestCode(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/tests/test_main.py`,
+        content: testCode
+      },
+      description: 'Create main test file'
+    });
+
+    // Create pytest configuration
+    const pytestIni = this.generatePytestConfig(options);
+    instructions.push({
+      tool: 'filesystem:write_file',
+      args: {
+        path: `${projectPath}/pytest.ini`,
+        content: pytestIni
+      },
+      description: 'Create pytest configuration'
+    });
+
+    return {
+      result: {
+        step: 'Set up testing framework',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  private integrateBrain(options: PythonProjectOptions, projectPath: string): {
+    result: StepResult;
+    instructions: BrainToolInstruction[];
+  } {
+    const instructions: BrainToolInstruction[] = [];
+    
+    // Save project to Brain state
+    const projectContext = {
+      projectName: options.projectName,
+      status: 'active',
+      created: new Date().toISOString(),
+      lastModified: new Date().toISOString(),
+      summary: options.description || `Python ${options.projectType} project`,
+      currentFocus: 'Initial development',
+      language: 'python',
+      packageManager: options.packageManager,
+      pythonVersion: options.pythonVersion || '3.11',
+      openTasks: this.generateInitialTasks(options),
+      completedTasks: ['Project structure created', 'Development environment configured'],
+      keyDecisions: [],
+      milestones: [{
+        timestamp: new Date().toISOString(),
+        title: 'Project Created',
+        description: 'Python project setup completed',
+        artifacts: ['pyproject.toml', 'README.md']
+      }],
+      keyFiles: [
+        `${projectPath}/pyproject.toml`,
+        `${projectPath}/README.md`,
+        `${projectPath}/src/${options.projectName.replace(/-/g, '_')}/main.py`
+      ]
+    };
+
+    instructions.push({
+      tool: 'brain:state_set',
+      args: {
+        category: 'project',
+        key: options.projectName,
+        value: projectContext
+      },
+      description: 'Save project to Brain state'
+    });
+
+    // Update last_project tracker
+    instructions.push({
+      tool: 'brain:state_set',
+      args: {
+        category: 'project',
+        key: 'last_project',
+        value: {
+          name: options.projectName,
+          path: projectPath,
+          status: 'active',
+          last_modified: new Date().toISOString(),
+          description: projectContext.summary
+        }
+      },
+      description: 'Update last_project tracker'
+    });
+
+    return {
+      result: {
+        step: 'Integrate with Brain system',
+        status: 'success'
+      },
+      instructions
+    };
+  }
+
+  // Continue with helper methods...
+  private generatePyprojectToml(options: PythonProjectOptions): string {
+    const packageName = options.projectName.replace(/-/g, '_');
+    const dependencies = this.getProjectDependencies(options);
+    const devDependencies = this.getDevDependencies(options);
+    
+    return `[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "${options.projectName}"
+version = "0.1.0"
+description = "${options.description || ''}"
+authors = [
+    {name = "${options.author || 'Your Name'}", email = "your.email@example.com"},
+]
+license = {text = "${options.license || 'MIT'}"}
+readme = "README.md"
+requires-python = ">=${options.pythonVersion || '3.11'}"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: ${this.getLicenseClassifier(options.license)}",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: ${options.pythonVersion || '3.11'}",
+]
+dependencies = [
+${dependencies.map(dep => `    "${dep}",`).join('\n')}
+]
+
+${options.projectType === 'cli-tool' ? `
+[project.scripts]
+${options.projectName} = "${packageName}.cli:main"
+` : ''}
+
+${options.projectType === 'mcp-tool' ? `
+[project.scripts]
+${options.projectName} = "${packageName}.server:main"
+` : ''}
+
+[project.optional-dependencies]
+dev = [
+${devDependencies.map(dep => `    "${dep}",`).join('\n')}
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/${packageName}"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ['py${(options.pythonVersion || '3.11').replace('.', '')}']
+include = '\\.pyi?$'
+extend-exclude = '''
+/(
+    \\.eggs
+  | \\.git
+  | \\.hg
+  | \\.mypy_cache
+  | \\.tox
+  | \\.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "${options.pythonVersion || '3.11'}"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+`;
+  }
+
+  // Helper methods for generating various file contents and configurations...
+  private getProjectDependencies(options: PythonProjectOptions): string[] {
+    const deps: string[] = [];
+    
+    switch (options.projectType) {
+      case 'mcp-tool':
+        deps.push('mcp>=1.0.0');
+        break;
+      case 'web-app':
+      case 'api':
+        deps.push('flask>=2.3.0');
+        deps.push('gunicorn>=21.0.0');
+        break;
+      case 'cli-tool':
+        deps.push('click>=8.1.0');
+        break;
+      case 'data-science':
+        deps.push('pandas>=2.0.0');
+        deps.push('numpy>=1.24.0');
+        deps.push('matplotlib>=3.7.0');
+        deps.push('seaborn>=0.12.0');
+        if (options.features?.jupyter) {
+          deps.push('jupyter>=1.0.0');
+          deps.push('ipykernel>=6.0.0');
+        }
+        break;
+      case 'ml':
+        deps.push('pandas>=2.0.0');
+        deps.push('numpy>=1.24.0');
+        deps.push('scikit-learn>=1.3.0');
+        deps.push('matplotlib>=3.7.0');
+        if (options.features?.jupyter) {
+          deps.push('jupyter>=1.0.0');
+          deps.push('ipykernel>=6.0.0');
+        }
+        break;
+    }
+    
+    // Add custom dependencies
+    if (options.dependencies) {
+      deps.push(...options.dependencies);
+    }
+    
+    return deps;
+  }
+
+  private getDevDependencies(options: PythonProjectOptions): string[] {
+    const deps: string[] = [];
+    
+    if (options.features?.testing !== false) {
+      deps.push('pytest>=7.4.0');
+      deps.push('pytest-cov>=4.1.0');
+    }
+    
+    if (options.features?.linting !== false) {
+      deps.push('flake8>=6.0.0');
+      deps.push('mypy>=1.5.0');
+    }
+    
+    if (options.features?.formatting !== false) {
+      deps.push('black>=23.0.0');
+      deps.push('isort>=5.12.0');
+    }
+    
+    // Add custom dev dependencies
+    if (options.devDependencies) {
+      deps.push(...options.devDependencies);
+    }
+    
+    return deps;
+  }
+
+  private getLicenseClassifier(license?: string): string {
+    switch (license) {
+      case 'MIT':
+        return 'MIT License';
+      case 'Apache-2.0':
+        return 'Apache Software License';
+      case 'GPL-3.0':
+        return 'GNU General Public License v3';
+      case 'ISC':
+        return 'ISC License (ISCL)';
+      default:
+        return 'MIT License';
+    }
+  }
+
+  // Continue with remaining helper methods for code generation...
+  private generateGitignore(): string {
+    return `# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/launch.json
+
+# PyCharm
+.idea/
+
+# macOS
+.DS_Store
+
+# Local data
+data/
+models/
+logs/
+*.log
+
+# uv
+.uv/
+uv.lock
+
+# Poetry
+poetry.lock
+`;
+  }
+
+  // Continue with main code generation methods
+  private generateMainCode(options: PythonProjectOptions): string {
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    switch (options.projectType) {
+      case 'cli-tool':
+        return `"""Main module for ${options.projectName}."""
+
+import sys
+from typing import Optional
+
+
+def main(args: Optional[list[str]] = None) -> int:
+    """Main entry point for ${options.projectName}."""
+    if args is None:
+        args = sys.argv[1:]
+    
+    print(f"Hello from ${options.projectName}!")
+    print(f"Arguments: {args}")
+    
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+`;
+
+      case 'mcp-tool':
+        return `"""Main MCP server module for ${options.projectName}."""
+
+import asyncio
+import logging
+from typing import Any
+
+from mcp.server import Server
+from mcp.server.models import InitializationOptions
+from mcp.server.stdio import stdio_server
+from mcp.types import Resource, Tool
+
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create server instance
+server = Server("${options.projectName}")
+
+
+@server.list_resources()
+async def handle_list_resources() -> list[Resource]:
+    """List available resources."""
+    return []
+
+
+@server.list_tools()
+async def handle_list_tools() -> list[Tool]:
+    """List available tools."""
+    return [
+        Tool(
+            name="hello",
+            description="Say hello with a custom message",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "The message to include in the greeting"
+                    }
+                },
+                "required": ["message"]
+            }
+        )
+    ]
+
+
+@server.call_tool()
+async def handle_call_tool(name: str, arguments: dict[str, Any]) -> Any:
+    """Handle tool calls."""
+    if name == "hello":
+        message = arguments.get("message", "World")
+        return f"Hello, {message}! This is ${options.projectName}."
+    else:
+        raise ValueError(f"Unknown tool: {name}")
+
+
+async def main():
+    """Run the MCP server."""
+    # Run the server using stdin/stdout streams
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="${options.projectName}",
+                server_version="0.1.0",
+                capabilities=server.get_capabilities(
+                    notification_options=None,
+                    experimental_capabilities={}
+                )
+            )
+        )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+`;
+
+      case 'web-app':
+      case 'api':
+        return `"""Web application for ${options.projectName}."""
+
+from flask import Flask, jsonify, request
+from typing import Dict, Any
+
+
+app = Flask(__name__)
+
+
+@app.route('/')
+def hello_world() -> Dict[str, str]:
+    """Root endpoint."""
+    return {"message": "Hello from ${options.projectName}!"}
+
+
+@app.route('/health')
+def health_check() -> Dict[str, str]:
+    """Health check endpoint."""
+    return {"status": "healthy", "service": "${options.projectName}"}
+
+
+@app.route('/api/v1/example', methods=['GET', 'POST'])
+def example_endpoint() -> Dict[str, Any]:
+    """Example API endpoint."""
+    if request.method == 'GET':
+        return {"method": "GET", "data": "Example data"}
+    elif request.method == 'POST':
+        data = request.get_json()
+        return {"method": "POST", "received": data}
+
+
+def main() -> None:
+    """Run the application."""
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+if __name__ == '__main__':
+    main()
+`;
+
+      case 'data-science':
+      case 'ml':
+        const className = options.projectName
+          .replace(/-/g, '')
+          .replace(/_/g, '')
+          .replace(/\b\w/g, l => l.toUpperCase());
+          
+        return `"""Main module for ${options.projectName}."""
+
+import pandas as pd
+import numpy as np
+from typing import Optional, Tuple
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class ${className}:
+    """Main class for ${options.projectName}."""
+    
+    def __init__(self):
+        """Initialize the class."""
+        self.data: Optional[pd.DataFrame] = None
+        self.model = None
+        
+    def load_data(self, filepath: str) -> pd.DataFrame:
+        """Load data from file."""
+        logger.info(f"Loading data from {filepath}")
+        self.data = pd.read_csv(filepath)
+        return self.data
+    
+    def preprocess_data(self) -> pd.DataFrame:
+        """Preprocess the data."""
+        if self.data is None:
+            raise ValueError("No data loaded. Call load_data() first.")
+        
+        logger.info("Preprocessing data...")
+        # Add your preprocessing steps here
+        processed_data = self.data.copy()
+        
+        return processed_data
+    
+    def train_model(self, X: pd.DataFrame, y: pd.Series) -> None:
+        """Train the model."""
+        logger.info("Training model...")
+        # Implement your model training here
+        pass
+    
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        """Make predictions."""
+        if self.model is None:
+            raise ValueError("No model trained. Call train_model() first.")
+        
+        logger.info("Making predictions...")
+        # Implement prediction logic here
+        return np.array([])
+
+
+def main() -> None:
+    """Main function."""
+    logger.info("Starting ${options.projectName}")
+    
+    # Initialize your project
+    project = ${className}()
+    
+    # Add your main logic here
+    print("${options.projectName} is ready!")
+
+
+if __name__ == "__main__":
+    main()
+`;
+
+      default:
+        return `"""Main module for ${options.projectName}."""
+
+from typing import Optional
+
+
+def hello(name: str = "World") -> str:
+    """Say hello to someone.
+    
+    Args:
+        name: The name to greet
+        
+    Returns:
+        A greeting message
+    """
+    return f"Hello, {name}!"
+
+
+def main() -> None:
+    """Main function."""
+    print(hello())
+    print(f"Welcome to ${options.projectName}!")
+
+
+if __name__ == "__main__":
+    main()
+`;
+    }
+  }
+
+  private generateCliCode(options: PythonProjectOptions): string {
+    return `"""Command-line interface for ${options.projectName}."""
+
+import argparse
+import sys
+from typing import Optional
+
+from .main import main as main_func
+
+
+def create_parser() -> argparse.ArgumentParser:
+    """Create the argument parser."""
+    parser = argparse.ArgumentParser(
+        prog="${options.projectName}",
+        description="${options.description || 'A CLI tool'}"
+    )
+    
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s 0.1.0"
+    )
+    
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Enable verbose output"
+    )
+    
+    # Add subcommands
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # Hello command
+    hello_parser = subparsers.add_parser("hello", help="Say hello")
+    hello_parser.add_argument("name", nargs="?", default="World", help="Name to greet")
+    
+    return parser
+
+
+def main(args: Optional[list[str]] = None) -> int:
+    """Main CLI entry point."""
+    parser = create_parser()
+    parsed_args = parser.parse_args(args)
+    
+    if parsed_args.verbose:
+        print(f"Running ${options.projectName} with args: {parsed_args}")
+    
+    if parsed_args.command == "hello":
+        print(f"Hello, {parsed_args.name}!")
+        return 0
+    elif parsed_args.command is None:
+        # No subcommand, run main function
+        return main_func(args)
+    else:
+        parser.print_help()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+`;
+  }
+
+  private generateMcpCode(options: PythonProjectOptions): string {
+    return this.generateMainCode(options); // MCP code is in main.py
+  }
+
+  private generateWebCode(options: PythonProjectOptions): string {
+    return this.generateMainCode(options); // Web code is in main.py
+  }
+
+  private generateRequirementsTxt(options: PythonProjectOptions): string {
+    const deps = this.getProjectDependencies(options);
+    return deps.join('\n') + '\n';
+  }
+
+  private generateDevRequirementsTxt(options: PythonProjectOptions): string {
+    const deps = this.getDevDependencies(options);
+    return deps.join('\n') + '\n';
+  }
+
+  private generateVSCodeSettings(options: PythonProjectOptions): any {
+    return {
+      "python.defaultInterpreterPath": options.packageManager === 'conda' 
+        ? `~/anaconda3/envs/${options.projectName}/bin/python`
+        : "./venv/bin/python",
+      "python.linting.enabled": options.features?.linting !== false,
+      "python.linting.pylintEnabled": false,
+      "python.linting.flake8Enabled": options.features?.linting !== false,
+      "python.formatting.provider": "black",
+      "python.formatting.blackArgs": ["--line-length=88"],
+      "python.sortImports.args": ["--profile", "black"],
+      "editor.formatOnSave": options.features?.formatting !== false,
+      "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+      },
+      "python.testing.pytestEnabled": options.features?.testing !== false,
+      "python.testing.pytestArgs": [
+        "tests"
+      ],
+      "files.exclude": {
+        "**/__pycache__": true,
+        "**/*.pyc": true,
+        "**/venv": true,
+        "**/.venv": true,
+        "**/env": true,
+        "**/.env": true,
+        "**/.pytest_cache": true,
+        "**/.mypy_cache": true,
+        "**/dist": true,
+        "**/*.egg-info": true
+      }
+    };
+  }
+
+  private generateLaunchConfig(options: PythonProjectOptions): any {
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    const configurations = [
+      {
+        "name": "Python: Current File",
+        "type": "python",
+        "request": "launch",
+        "program": "${file}",
+        "console": "integratedTerminal"
+      },
+      {
+        "name": "Python: Main Module",
+        "type": "python",
+        "request": "launch",
+        "module": packageName,
+        "console": "integratedTerminal"
+      }
+    ];
+
+    if (options.projectType === 'cli-tool') {
+      configurations.push({
+        "name": "Python: CLI",
+        "type": "python",
+        "request": "launch",
+        "module": `${packageName}.cli`,
+        "args": ["hello", "Debug"],
+        "console": "integratedTerminal"
+      });
+    }
+
+    if (options.projectType === 'web-app' || options.projectType === 'api') {
+      configurations.push({
+        "name": "Python: Flask",
+        "type": "python",
+        "request": "launch",
+        "module": "flask",
+        "env": {
+          "FLASK_APP": `src/${packageName}/main.py`,
+          "FLASK_ENV": "development"
+        },
+        "args": ["run", "--debug"],
+        "console": "integratedTerminal"
+      });
+    }
+
+    return {
+      "version": "0.2.0",
+      "configurations": configurations
+    };
+  }
+
+  private generateGitHubActionsWorkflow(options: PythonProjectOptions): string {
+    const pythonVersions = options.pythonVersion ? [options.pythonVersion] : ['3.11', '3.12'];
+    
+    const uvWorkflow = `    - name: Install uv
+      uses: astral-sh/setup-uv@v2
+      with:
+        version: "latest"
+
+    - name: Install dependencies
+      run: |
+        uv sync --all-extras --dev
+        
+    - name: Run tests
+      run: |
+        uv run pytest --cov=src --cov-report=xml
+
+    - name: Run linting
+      run: |
+        uv run flake8 src tests
+        uv run black --check src tests
+        uv run isort --check-only src tests
+
+    - name: Run type checking
+      run: |
+        uv run mypy src`;
+
+    const poetryWorkflow = `    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+
+    - name: Install project
+      run: poetry install --no-interaction
+
+    - name: Run tests
+      run: |
+        poetry run pytest --cov=src --cov-report=xml
+
+    - name: Run linting
+      run: |
+        poetry run flake8 src tests
+        poetry run black --check src tests
+        poetry run isort --check-only src tests
+
+    - name: Run type checking
+      run: |
+        poetry run mypy src`;
+
+    const pipWorkflow = `    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install -r requirements-dev.txt
+
+    - name: Run tests
+      run: |
+        pytest --cov=src --cov-report=xml
+
+    - name: Run linting
+      run: |
+        flake8 src tests
+        black --check src tests
+        isort --check-only src tests
+
+    - name: Run type checking
+      run: |
+        mypy src`;
+
+    const workflowSteps = options.packageManager === 'uv' ? uvWorkflow : 
+                         options.packageManager === 'poetry' ? poetryWorkflow : pipWorkflow;
+    
+    return `name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [${pythonVersions.map(v => `"${v}"`).join(', ')}]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+${workflowSteps}
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "${pythonVersions[0]}"
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build
+
+    - name: Build package
+      run: python -m build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: dist
+        path: dist/
+`;
+  }
+
+  private generateReadme(options: PythonProjectOptions): string {
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    return `# ${options.projectName}
+
+${options.description || 'A Python project'}
+
+## Features
+
+- Modern Python development setup
+- Comprehensive testing with pytest
+- Code formatting with Black
+- Import sorting with isort
+- Linting with flake8
+- Type checking with mypy
+- Continuous Integration with GitHub Actions
+- VS Code development environment
+
+## Installation
+
+### Using ${options.packageManager || 'pip'}
+
+${this.getInstallInstructions(options)}
+
+## Usage
+
+${this.getUsageInstructions(options)}
+
+## Development
+
+### Setup Development Environment
+
+1. Clone the repository:
+   \`\`\`bash
+   git clone https://github.com/${this.githubUsername || 'your-username'}/${options.projectName}.git
+   cd ${options.projectName}
+   \`\`\`
+
+2. Set up virtual environment:
+   ${this.getDevSetupInstructions(options)}
+
+3. Install in development mode:
+   ${this.getDevInstallInstructions(options)}
+
+### Running Tests
+
+\`\`\`bash
+${this.getTestCommand(options)}
+\`\`\`
+
+### Code Formatting
+
+\`\`\`bash
+${this.getFormatCommand(options)}
+\`\`\`
+
+### Linting
+
+\`\`\`bash
+${this.getLintCommand(options)}
+\`\`\`
+
+## Project Structure
+
+\`\`\`
+${options.projectName}/
+├── src/
+│   └── ${packageName}/
+│       ├── __init__.py
+│       └── main.py
+├── tests/
+│   ├── __init__.py
+│   └── test_main.py
+├── docs/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── .vscode/
+│   ├── settings.json
+│   └── launch.json
+├── pyproject.toml
+├── README.md
+├── LICENSE
+├── CHANGELOG.md
+└── .gitignore
+\`\`\`
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (\`git checkout -b feature/amazing-feature\`)
+3. Make your changes
+4. Run tests and linting
+5. Commit your changes (\`git commit -m 'Add amazing feature'\`)
+6. Push to the branch (\`git push origin feature/amazing-feature\`)
+7. Open a Pull Request
+
+## License
+
+This project is licensed under the ${options.license || 'MIT'} License - see the [LICENSE](LICENSE) file for details.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a list of changes and releases.
+
+## Support
+
+If you encounter any issues or have questions, please [open an issue](https://github.com/${this.githubUsername || 'your-username'}/${options.projectName}/issues) on GitHub.
+`;
+  }
+
+  private generateLicense(license: string, author?: string): string {
+    const year = new Date().getFullYear();
+    const authorName = author || 'Your Name';
+    
+    switch (license) {
+      case 'MIT':
+        return `MIT License
+
+Copyright (c) ${year} ${authorName}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+`;
+
+      case 'Apache-2.0':
+        return `Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Copyright ${year} ${authorName}
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+`;
+
+      default:
+        return `Copyright (c) ${year} ${authorName}
+
+All rights reserved.
+`;
+    }
+  }
+
+  private generateChangelog(options: PythonProjectOptions): string {
+    return `# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Initial project setup
+- Basic project structure
+- Testing framework
+- CI/CD pipeline
+- Development environment configuration
+
+## [0.1.0] - ${new Date().toISOString().split('T')[0]}
+
+### Added
+- Initial release
+- Core functionality
+- Documentation
+- Testing suite
+`;
+  }
+
+  // Add remaining helper methods for test generation, task generation, etc.
+  private generateTestCode(options: PythonProjectOptions): string {
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    switch (options.projectType) {
+      case 'cli-tool':
+        return `"""Tests for ${options.projectName}."""
+
+import pytest
+from ${packageName}.main import main
+from ${packageName}.cli import main as cli_main
+
+
+def test_main_function():
+    """Test the main function."""
+    result = main([])
+    assert result == 0
+
+
+def test_cli_hello():
+    """Test the CLI hello command."""
+    result = cli_main(["hello", "Test"])
+    assert result == 0
+
+
+class TestCLI:
+    """Test class for CLI functionality."""
+    
+    def test_version_argument(self, capsys):
+        """Test --version argument."""
+        with pytest.raises(SystemExit):
+            cli_main(["--version"])
+        
+        captured = capsys.readouterr()
+        assert "${options.projectName} 0.1.0" in captured.out
+`;
+
+      case 'mcp-tool':
+        return `"""Tests for ${options.projectName} MCP server."""
+
+import pytest
+import asyncio
+from ${packageName}.main import server
+
+
+@pytest.mark.asyncio
+async def test_list_tools():
+    """Test listing tools."""
+    tools = await server.list_tools()
+    assert len(tools) > 0
+    assert any(tool.name == "hello" for tool in tools)
+
+
+@pytest.mark.asyncio
+async def test_call_hello_tool():
+    """Test calling the hello tool."""
+    result = await server.call_tool("hello", {"message": "Test"})
+    assert "Hello, Test!" in result
+    assert "${options.projectName}" in result
+`;
+
+      case 'web-app':
+      case 'api':
+        return `"""Tests for ${options.projectName} web application."""
+
+import pytest
+from ${packageName}.main import app
+
+
+@pytest.fixture
+def client():
+    """Create a test client."""
+    app.config['TESTING'] = True
+    with app.test_client() as client:
+        yield client
+
+
+def test_root_endpoint(client):
+    """Test the root endpoint."""
+    response = client.get('/')
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "message" in data
+    assert "${options.projectName}" in data["message"]
+`;
+
+      default:
+        return `"""Tests for ${options.projectName}."""
+
+import pytest
+from ${packageName}.main import hello, main
+
+
+def test_hello_default():
+    """Test hello function with default argument."""
+    result = hello()
+    assert result == "Hello, World!"
+
+
+def test_hello_custom_name():
+    """Test hello function with custom name."""
+    result = hello("Test")
+    assert result == "Hello, Test!"
+`;
+    }
+  }
+
+  private generatePytestConfig(options: PythonProjectOptions): string {
+    return `[tool:pytest]
+testpaths = tests
+python_files = test_*.py
+python_functions = test_*
+addopts = -v --tb=short --cov=src --cov-report=term-missing --cov-report=html
+filterwarnings = 
+    ignore::DeprecationWarning
+    ignore::PendingDeprecationWarning
+markers =
+    slow: marks tests as slow (deselect with '-m "not slow"')
+    integration: marks tests as integration tests
+    unit: marks tests as unit tests
+`;
+  }
+
+  private generateInitialTasks(options: PythonProjectOptions): string[] {
+    const tasks = [
+      'Implement core functionality',
+      'Write comprehensive tests',
+      'Add error handling',
+      'Create usage examples'
+    ];
+    
+    if (options.projectType === 'mcp-tool') {
+      tasks.push('Define all MCP tools', 'Test with MCP client');
+    }
+    
+    if (options.projectType === 'cli-tool') {
+      tasks.push('Add more commands', 'Improve help text');
+    }
+    
+    if (options.projectType === 'web-app' || options.projectType === 'api') {
+      tasks.push('Add more routes', 'Implement authentication', 'Add database integration');
+    }
+
+    if (options.projectType === 'data-science' || options.projectType === 'ml') {
+      tasks.push('Prepare datasets', 'Implement data pipeline', 'Create visualizations');
+    }
+    
+    return tasks;
+  }
+
+  private generateNextSteps(options: PythonProjectOptions, summary: PythonProjectSummary): string[] {
+    const steps = [
+      `cd ${options.projectName}`,
+    ];
+
+    // Add package manager specific commands
+    switch (options.packageManager) {
+      case 'uv':
+        steps.push('uv run python -m src.' + options.projectName.replace(/-/g, '_') + '.main  # Run main');
+        steps.push('uv run pytest  # Run tests');
+        break;
+      case 'poetry':
+        steps.push('poetry run python -m src.' + options.projectName.replace(/-/g, '_') + '.main  # Run main');
+        steps.push('poetry run pytest  # Run tests');
+        break;
+      case 'conda':
+        steps.push(`conda activate ${options.projectName}`);
+        steps.push('python -m src.' + options.projectName.replace(/-/g, '_') + '.main  # Run main');
+        steps.push('pytest  # Run tests');
+        break;
+      default: // pip
+        steps.push('source venv/bin/activate  # Activate virtual environment');
+        steps.push('python -m src.' + options.projectName.replace(/-/g, '_') + '.main  # Run main');
+        steps.push('pytest  # Run tests');
+        break;
+    }
+    
+    if (summary.githubRepo) {
+      steps.push('git push origin main  # Push to GitHub');
+    }
+    
+    steps.push(
+      'Open in VS Code: code .',
+      `Edit src/${options.projectName.replace(/-/g, '_')}/main.py to start coding`,
+      'Check README.md for more information'
+    );
+    
+    return steps;
+  }
+
+  // Helper methods for README generation
+  private getInstallInstructions(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return `\`\`\`bash
+uv add ${options.projectName}
+\`\`\``;
+      case 'poetry':
+        return `\`\`\`bash
+poetry add ${options.projectName}
+\`\`\``;
+      case 'conda':
+        return `\`\`\`bash
+conda install -c conda-forge ${options.projectName}
+\`\`\``;
+      default: // pip
+        return `\`\`\`bash
+pip install ${options.projectName}
+\`\`\``;
+    }
+  }
+
+  private getUsageInstructions(options: PythonProjectOptions): string {
+    const packageName = options.projectName.replace(/-/g, '_');
+    
+    switch (options.projectType) {
+      case 'cli-tool':
+        return `\`\`\`bash
+# Use as a command-line tool
+${options.projectName} hello World
+
+# Or run the module directly
+python -m ${packageName}.cli hello World
+\`\`\``;
+        
+      case 'mcp-tool':
+        return `\`\`\`bash
+# Run the MCP server
+${options.projectName}
+
+# Or run with Python
+python -m ${packageName}.server
+\`\`\``;
+        
+      case 'web-app':
+      case 'api':
+        return `\`\`\`python
+# Run the web application
+from ${packageName}.main import app
+
+if __name__ == '__main__':
+    app.run(debug=True)
+\`\`\`
+
+Or run directly:
+\`\`\`bash
+python -m ${packageName}.main
+\`\`\``;
+        
+      default:
+        return `\`\`\`python
+from ${packageName}.main import hello
+
+print(hello("World"))
+\`\`\`
+
+Or run directly:
+\`\`\`bash
+python -m ${packageName}.main
+\`\`\``;
+    }
+  }
+
+  private getDevSetupInstructions(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return `\`\`\`bash
+uv venv
+source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
+\`\`\``;
+      case 'poetry':
+        return `\`\`\`bash
+poetry shell
+\`\`\``;
+      case 'conda':
+        return `\`\`\`bash
+conda create -n ${options.projectName} python=${options.pythonVersion || '3.11'}
+conda activate ${options.projectName}
+\`\`\``;
+      default: // pip
+        return `\`\`\`bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+\`\`\``;
+    }
+  }
+
+  private getDevInstallInstructions(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return `\`\`\`bash
+uv sync --all-extras --dev
+\`\`\``;
+      case 'poetry':
+        return `\`\`\`bash
+poetry install
+\`\`\``;
+      case 'conda':
+        return `\`\`\`bash
+pip install -e .
+pip install -r requirements-dev.txt
+\`\`\``;
+      default: // pip
+        return `\`\`\`bash
+pip install -e .
+pip install -r requirements-dev.txt
+\`\`\``;
+    }
+  }
+
+  private getTestCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run pytest';
+      case 'poetry':
+        return 'poetry run pytest';
+      default:
+        return 'pytest';
+    }
+  }
+
+  private getFormatCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run black src tests && uv run isort src tests';
+      case 'poetry':
+        return 'poetry run black src tests && poetry run isort src tests';
+      default:
+        return 'black src tests && isort src tests';
+    }
+  }
+
+  private getLintCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run flake8 src tests && uv run mypy src';
+      case 'poetry':
+        return 'poetry run flake8 src tests && poetry run mypy src';
+      default:
+        return 'flake8 src tests && mypy src';
+    }
+  }
+}

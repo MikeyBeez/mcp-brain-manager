@@ -50,8 +50,8 @@ export class MultiProjectManager {
 2. Parse and display the current status
 
 The status will show:
-- 🎯 Foreground project (currently active)
-- 📊 Background projects (ongoing tasks)
+- (target) Foreground project (currently active)
+- (stats) Background projects (ongoing tasks)
 - 🕐 Recent projects (quick resume)
 ${verbose ? '\nWith verbose mode, I\'ll include detailed context and notes.' : ''}`;
   }

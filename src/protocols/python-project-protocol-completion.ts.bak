@@ -1,0 +1,68 @@
+        return `\`\`\`bash
+conda create -n ${options.projectName} python=${options.pythonVersion || '3.11'}
+conda activate ${options.projectName}
+\`\`\``;
+      default: // pip
+        return `\`\`\`bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+\`\`\``;
+    }
+  }
+
+  private getDevInstallInstructions(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return `\`\`\`bash
+uv sync --all-extras --dev
+\`\`\``;
+      case 'poetry':
+        return `\`\`\`bash
+poetry install
+\`\`\``;
+      case 'conda':
+        return `\`\`\`bash
+pip install -e .
+pip install -r requirements-dev.txt
+\`\`\``;
+      default: // pip
+        return `\`\`\`bash
+pip install -e .
+pip install -r requirements-dev.txt
+\`\`\``;
+    }
+  }
+
+  private getTestCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run pytest';
+      case 'poetry':
+        return 'poetry run pytest';
+      default:
+        return 'pytest';
+    }
+  }
+
+  private getFormatCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run black src tests && uv run isort src tests';
+      case 'poetry':
+        return 'poetry run black src tests && poetry run isort src tests';
+      default:
+        return 'black src tests && isort src tests';
+    }
+  }
+
+  private getLintCommand(options: PythonProjectOptions): string {
+    switch (options.packageManager) {
+      case 'uv':
+        return 'uv run flake8 src tests && uv run mypy src';
+      case 'poetry':
+        return 'poetry run flake8 src tests && poetry run mypy src';
+      default:
+        return 'flake8 src tests && mypy src';
+    }
+  }
+}

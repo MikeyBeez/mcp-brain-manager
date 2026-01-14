@@ -13,12 +13,12 @@ describe('BrainManager', () => {
     manager = new BrainManager();
   });
 
-  test('should initialize successfully', async () => {
+  it('should initialize successfully', async () => {
     const result = await manager.initialize();
-    expect(result).toBe(true);
+    assert.strictEqual(result, true);
   });
 
-  test('should propose and confirm updates', async () => {
+  it('should propose and confirm updates', async () => {
     // Create a test project
     await manager.switchProject('test-project', true, 'software');
 
@@ -29,35 +29,35 @@ describe('BrainManager', () => {
       currentFocus: 'Testing'
     });
 
-    expect(proposal.type).toBe('progress');
-    expect(proposal.changesSummary).toContain('Completed 1 tasks');
-    expect(proposal.changesSummary).toContain('Added 2 new tasks');
+    assert.strictEqual(proposal.type, 'progress');
+    assert.ok(proposal.changesSummary.includes('Completed 1 tasks'));
+    assert.ok(proposal.changesSummary.includes('Added 2 new tasks'));
 
     // Confirm the update
     const result = await manager.confirmUpdate(proposal.id);
-    expect(result.success).toBe(true);
+    assert.strictEqual(result.success, true);
   });
 
-  test('should handle project switching with stack', async () => {
+  it('should handle project switching with stack', async () => {
     // Create two projects
     await manager.switchProject('project-1', true);
     await manager.switchProject('project-2', true);
 
     // Should be on project-2
     const summary1 = await manager.getContextSummary();
-    expect(summary1.currentProject?.name).toBe('project-2');
-    expect(summary1.stackDepth).toBe(1);
+    assert.strictEqual(summary1.currentProject?.name, 'project-2');
+    assert.strictEqual(summary1.stackDepth, 1);
 
     // Return to previous
     const result = await manager.returnToPrevious();
-    expect(result.success).toBe(true);
-    expect(result.project?.projectName).toBe('project-1');
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.project?.projectName, 'project-1');
 
     const summary2 = await manager.getContextSummary();
-    expect(summary2.stackDepth).toBe(0);
+    assert.strictEqual(summary2.stackDepth, 0);
   });
 
-  test('should generate dashboards', async () => {
+  it('should generate dashboards', async () => {
     await manager.switchProject('dashboard-test', true, 'software');
     
     // Add some data
@@ -73,10 +73,10 @@ describe('BrainManager', () => {
 
     const dashboard = await manager.generateDashboard();
     
-    expect(dashboard).toContain('# dashboard-test');
-    expect(dashboard).toContain('Core features');
-    expect(dashboard).toContain('Use TypeScript');
-    expect(dashboard).toContain('Type safety and better tooling');
+    assert.ok(dashboard.includes('# dashboard-test'));
+    assert.ok(dashboard.includes('Core features'));
+    assert.ok(dashboard.includes('Use TypeScript'));
+    assert.ok(dashboard.includes('Type safety and better tooling'));
   });
 });
 
@@ -87,7 +87,7 @@ describe('SemanticRouter', () => {
     router = new SemanticRouter();
   });
 
-  test('should classify project management intents', async () => {
+  it('should classify project management intents', async () => {
     const testCases = [
       'I want to build a new web application',
       'Let\'s create a REST API',
@@ -96,12 +96,12 @@ describe('SemanticRouter', () => {
 
     for (const message of testCases) {
       const result = await router.classify(message);
-      expect(result.mode).toBe('project_management');
-      expect(result.confidence).toBeGreaterThan(0.5);
+      assert.strictEqual(result.mode, 'project_management');
+      assert.ok(result.confidence > 0.5);
     }
   });
 
-  test('should detect continuation with context', async () => {
+  it('should detect continuation with context', async () => {
     const context = { lastProject: 'my-app' };
     const continuationMessages = [
       'Let\'s continue working on this',
@@ -111,12 +111,12 @@ describe('SemanticRouter', () => {
 
     for (const message of continuationMessages) {
       const result = await router.classify(message, context);
-      expect(result.mode).toBe('project_continuation');
-      expect(result.reasoning).toContain('continuation');
+      assert.strictEqual(result.mode, 'project_continuation');
+      assert.ok(result.reasoning.includes('continuation'));
     }
   });
 
-  test('should classify research intents', async () => {
+  it('should classify research intents', async () => {
     const researchMessages = [
       'How does OAuth2 work?',
       'I want to learn about machine learning',
@@ -125,14 +125,14 @@ describe('SemanticRouter', () => {
 
     for (const message of researchMessages) {
       const result = await router.classify(message);
-      expect(result.mode).toBe('research');
+      assert.strictEqual(result.mode, 'research');
     }
   });
 
-  test('should handle explicit mode switches', async () => {
+  it('should handle explicit mode switches', async () => {
     const result = await router.classify('switch to analysis mode');
-    expect(result.mode).toBe('analysis');
-    expect(result.confidence).toBeGreaterThan(0.9);
+    assert.strictEqual(result.mode, 'analysis');
+    assert.ok(result.confidence > 0.9);
   });
 });
 
@@ -143,18 +143,18 @@ describe('TemplateManager', () => {
     templateManager = new TemplateManager();
   });
 
-  test('should have default templates', () => {
+  it('should have default templates', () => {
     const templates = templateManager.getAllTemplates();
     const templateKeys = templates.map(t => t.key);
     
-    expect(templateKeys).toContain('software');
-    expect(templateKeys).toContain('research');
-    expect(templateKeys).toContain('ml');
-    expect(templateKeys).toContain('writing');
-    expect(templateKeys).toContain('custom');
+    assert.ok(templateKeys.includes('software'));
+    assert.ok(templateKeys.includes('research'));
+    assert.ok(templateKeys.includes('ml'));
+    assert.ok(templateKeys.includes('writing'));
+    assert.ok(templateKeys.includes('custom'));
   });
 
-  test('should apply templates correctly', () => {
+  it('should apply templates correctly', () => {
     const project = templateManager.applyTemplate('software', 'my-app', {
       summary: 'My awesome application',
       metadata: {
@@ -162,13 +162,13 @@ describe('TemplateManager', () => {
       }
     });
 
-    expect(project.projectName).toBe('my-app');
-    expect(project.summary).toBe('My awesome application');
-    expect(project.metadata.techStack).toEqual(['TypeScript', 'React', 'Node.js']);
-    expect(project.openTasks.length).toBeGreaterThan(0);
+    assert.strictEqual(project.projectName, 'my-app');
+    assert.strictEqual(project.summary, 'My awesome application');
+    assert.deepStrictEqual(project.metadata.techStack, ['TypeScript', 'React', 'Node.js']);
+    assert.ok(project.openTasks.length > 0);
   });
 
-  test('should suggest appropriate templates', () => {
+  it('should suggest appropriate templates', () => {
     expect(templateManager.suggestTemplate('build a machine learning model')).toBe('ml');
     expect(templateManager.suggestTemplate('write a blog post')).toBe('writing');
     expect(templateManager.suggestTemplate('research quantum computing')).toBe('research');
@@ -178,7 +178,7 @@ describe('TemplateManager', () => {
 
 // Integration test
 describe('Integration', () => {
-  test('should handle complete workflow', async () => {
+  it('should handle complete workflow', async () => {
     const manager = new BrainManager();
     const router = new SemanticRouter();
     const templateManager = new TemplateManager();
@@ -188,7 +188,7 @@ describe('Integration', () => {
 
     // 2. Classify intent
     const classification = await router.classify('I want to build a chat application');
-    expect(classification.mode).toBe('project_management');
+    assert.strictEqual(classification.mode, 'project_management');
 
     // 3. Create project with template
     const suggestedTemplate = templateManager.suggestTemplate('chat application');
@@ -218,16 +218,16 @@ describe('Integration', () => {
 
     // 8. Generate dashboard
     const dashboard = await manager.generateDashboard();
-    expect(dashboard).toContain('chat-app');
-    expect(dashboard).toContain('Backend infrastructure');
-    expect(dashboard).toContain('Socket.IO');
+    assert.ok(dashboard.includes('chat-app'));
+    assert.ok(dashboard.includes('Backend infrastructure'));
+    assert.ok(dashboard.includes('Socket.IO'));
 
     // 9. Get analytics
     const patterns = await manager.analyzePatterns('session', 'productivity');
-    expect(patterns.patterns).toBeDefined();
+    assert.ok(patterns.patterns !== undefined);
   });
 
-  test('should handle edge cases gracefully', async () => {
+  it('should handle edge cases gracefully', async () => {
     const manager = new BrainManager();
 
     // Try to update without a project
@@ -235,21 +235,21 @@ describe('Integration', () => {
 
     // Try to confirm non-existent update
     const result = await manager.confirmUpdate('fake-id');
-    expect(result.success).toBe(false);
+    assert.strictEqual(result.success, false);
 
     // Try to return without stack
     const returnResult = await manager.returnToPrevious();
-    expect(returnResult.success).toBe(false);
+    assert.strictEqual(returnResult.success, false);
 
     // Generate dashboard without project
     const dashboard = await manager.generateDashboard('non-existent');
-    expect(dashboard).toContain('No Project Found');
+    assert.ok(dashboard.includes('No Project Found'));
   });
 });
 
 // Performance tests
 describe('Performance', () => {
-  test('should handle large projects efficiently', async () => {
+  it('should handle large projects efficiently', async () => {
     const manager = new BrainManager();
     await manager.switchProject('large-project', true);
 
@@ -264,16 +264,16 @@ describe('Performance', () => {
     const duration = Date.now() - start;
 
     // Should complete in reasonable time
-    expect(duration).toBeLessThan(5000); // 5 seconds for 100 updates
+    assert.ok(duration < 5000); // 5 seconds for 100 updates
 
     // Dashboard should still generate quickly
     const dashboardStart = Date.now();
     await manager.generateDashboard();
     const dashboardDuration = Date.now() - dashboardStart;
-    expect(dashboardDuration).toBeLessThan(100); // 100ms
+    assert.ok(dashboardDuration < 100); // 100ms
   });
 
-  test('should clean up old proposals', async () => {
+  it('should clean up old proposals', async () => {
     const manager = new BrainManager();
     await manager.switchProject('test', true);
 
@@ -288,7 +288,7 @@ describe('Performance', () => {
 
     // Check that all are initially available
     const summary1 = await manager.getContextSummary();
-    expect(summary1.pendingUpdates).toBe(10);
+    assert.strictEqual(summary1.pendingUpdates, 10);
 
     // Old proposals should be cleaned up on next proposal
     // (In real implementation, would wait 5 minutes)
@@ -298,6 +298,6 @@ describe('Performance', () => {
 
     // Pending count should reflect cleanup
     const summary2 = await manager.getContextSummary();
-    expect(summary2.pendingUpdates).toBeLessThanOrEqual(11);
+    assert.ok(summary2.pendingUpdates <= 11);
   });
 });

@@ -75,7 +75,7 @@ export class BrainManager {
   }
 
   async initialize(): Promise<boolean> {
-    console.log('🧠 Initializing Brain Manager...');
+    console.log('(brain) Initializing Brain Manager...');
     return await this.brainClient.brainInit();
   }
 
@@ -323,13 +323,13 @@ export class BrainManager {
 
 > **Status:** ${project.status} | **Last Modified:** ${project.lastModified}
 
-## 📋 Summary
+## (list) Summary
 ${project.summary}
 
-## 🎯 Current Focus
+## (target) Current Focus
 ${project.currentFocus}
 
-## ✅ Open Tasks (${project.openTasks.length})
+## (ok) Open Tasks (${project.openTasks.length})
 `;
 
     if (project.openTasks.length > 0) {
@@ -353,7 +353,7 @@ ${project.currentFocus}
       dashboard += '*No milestones recorded*\n';
     }
 
-    dashboard += `\n## 💡 Key Decisions\n`;
+    dashboard += `\n## (tip) Key Decisions\n`;
     const recentDecisions = project.keyDecisions.slice(-5);
     if (recentDecisions.length > 0) {
       recentDecisions.forEach(decision => {
@@ -368,7 +368,7 @@ ${project.currentFocus}
     }
 
     if (includeAnalytics) {
-      dashboard += `\n## 📊 Analytics\n`;
+      dashboard += `\n## (stats) Analytics\n`;
       const analytics = this.calculateProjectAnalytics(project);
       dashboard += `- **Velocity:** ${analytics.tasksCompletedPerWeek} tasks/week\n`;
       dashboard += `- **Completion Rate:** ${analytics.completionRate}%\n`;
@@ -484,7 +484,7 @@ ${project.currentFocus}
     changes: string[],
     context: ProjectContext
   ): string {
-    let prompt = `📝 Proposed ${updateType} update for '${context.projectName}':\n\n`;
+    let prompt = `(note) Proposed ${updateType} update for '${context.projectName}':\n\n`;
     
     changes.forEach(change => {
       prompt += `  • ${change}\n`;

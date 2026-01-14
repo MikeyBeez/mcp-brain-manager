@@ -21,7 +21,7 @@ export class MockBrainToolClient implements BrainToolClient {
   private mockStorage = new Map<string, any>();
 
   async brainInit(): Promise<boolean> {
-    console.log('🧠 Mock: Initializing Brain...');
+    console.log('(brain) Mock: Initializing Brain...');
     return true;
   }
 
@@ -32,24 +32,24 @@ export class MockBrainToolClient implements BrainToolClient {
   }
 
   async brainRecall(query: string, limit: number = 10): Promise<any[]> {
-    console.log(`🔍 Mock: Searching for: ${query}`);
+    console.log(`(search) Mock: Searching for: ${query}`);
     // Return empty for now
     return [];
   }
 
   async stateSet(category: string, key: string, value: any): Promise<boolean> {
-    console.log(`📊 Mock: Setting ${category}/${key}`);
+    console.log(`(stats) Mock: Setting ${category}/${key}`);
     this.mockStorage.set(`state:${category}:${key}`, value);
     return true;
   }
 
   async stateGet(category: string, key: string): Promise<any> {
-    console.log(`📊 Mock: Getting ${category}/${key}`);
+    console.log(`(stats) Mock: Getting ${category}/${key}`);
     return this.mockStorage.get(`state:${category}:${key}`) || null;
   }
 
   async stateList(category: string, limit: number = 20): Promise<any[]> {
-    console.log(`📊 Mock: Listing ${category} (limit: ${limit})`);
+    console.log(`(stats) Mock: Listing ${category} (limit: ${limit})`);
     const results = [];
     for (const [k, v] of this.mockStorage.entries()) {
       if (k.startsWith(`state:${category}:`)) {
@@ -60,7 +60,7 @@ export class MockBrainToolClient implements BrainToolClient {
   }
 
   async obsidianNote(action: string, params: any): Promise<any> {
-    console.log(`📝 Mock: Obsidian ${action}`, params);
+    console.log(`(note) Mock: Obsidian ${action}`, params);
     return { success: true };
   }
 }
